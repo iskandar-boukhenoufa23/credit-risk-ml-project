@@ -1,0 +1,66 @@
+version: "3.8"
+
+services:
+  mlflow:
+    build: .
+    container_name: mlflow
+    ports:
+      - "5000:5000"
+    depends_on:
+      - mysql
+      - minio
+    environment:
+      - AWS_ACCESS_KEY_ID=minioadmin
+      - AWS_SECRET_ACCESS_KEY=minioadmin
+      - MLFLOW_S3_ENDPOINT_URL=http://minio:9000
+    command: >
+      mlflow server
+      --backend-store-uri mysql+pymysql://mlflow:mlflow@mysql/mlflow
+      --default-artifact-root s3://mlflow/
+      --host 0.0.0.0
+
+  mysql:
+    image: mysql:8
+    container_name: mlflow-mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD=root
+      MYSQL_DATABASE=mlflow
+      MYSQL_USER=mlflow
+      MYSQL_PASSWORD=mlflow
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  minio:
+    image: minio/minio
+    container_name: mlflow-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  create-bucket:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set minio http://minio:9000 minioadmin minioadmin;
+      mc mb minio/mlflow;
+      mc policy set public minio/mlflow;
+      exit 0;
+      "
+
+  
+
+volumes:
+  mysql_data:
+  minio_data:
